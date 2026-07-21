@@ -13,7 +13,9 @@ dependencies = [
     "jax",
     "jaxlib",
     "numpy",
-    "vbjax",
+    "scipy",
+    # vbjax and apvbt are VENDORED under vendor/ (see vendor/README.md),
+    # not pip-installed. tvb_max/__init__.py puts vendor/ on sys.path.
 ]
 
 [project.optional-dependencies]

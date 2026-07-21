@@ -6,10 +6,10 @@ run that replaces the SDE simulation with a single forward pass.
 
 Run: python examples/01_compile_and_infer.py
 """
+import tvb_max  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
 import jax.numpy as jnp
 import vbjax as vb
 
-import tvb_max
 from tvb_max.compiler import ir, pipeline
 
 

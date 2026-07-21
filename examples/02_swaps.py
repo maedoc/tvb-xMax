@@ -7,10 +7,10 @@ select a different pre-compiled artifact from the registry.
 
 Run: python examples/02_swaps.py
 """
+import tvb_max  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
 import jax.numpy as jnp
 import vbjax as vb
 
-import tvb_max
 from tvb_max.compiler import ir, pipeline, swap
 
 

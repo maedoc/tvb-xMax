@@ -6,9 +6,19 @@ compiler: the cross-coder is the IR, a trained neural surrogate is the
 the "nearly infinite speedup".  Because the IR is parcellation-invariant,
 swapping connectivity / parameters / models / features is free.
 
-Built on top of vbjax (simulation substrate) and apvbt (cross-coder +
-SBI patterns).  See PLAN.md for the full design.
+vbjax and apvbt are **vendored** under ``vendor/`` (see ``vendor/README.md``);
+this import block puts them on ``sys.path`` so ``import vbjax`` /
+``import apvbt`` resolve to the pinned copies, not whatever is in
+site-packages.  ``sbi`` / ``jax`` / ``torch`` remain pip dependencies.
+See PLAN.md for the full design.
 """
+
+import os as _os
+import sys as _sys
+
+_VENDOR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "vendor")
+if _VENDOR not in _sys.path:
+    _sys.path.insert(0, _VENDOR)
 
 __version__ = "0.1.0"
 

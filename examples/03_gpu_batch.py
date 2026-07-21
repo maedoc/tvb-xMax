@@ -5,11 +5,11 @@ batch of (u, theta) pairs in one shot, and benchmarking the speedup vs
 the real simulation.  This is where the ~10^3-10^4x amortized speedup
 shows up.
 """
+import tvb_max  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
 import time
 import jax.numpy as jnp
 import vbjax as vb
 
-import tvb_max
 from tvb_max.compiler import ir, pipeline, vectorize
 
 
