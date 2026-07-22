@@ -82,6 +82,38 @@ python bench/bench_portable_long_sdde.py
 See the complete configuration in
 [`bench/portable_feature_prediction.md`](bench/portable_feature_prediction.md).
 
+### Compiled dynamical features
+
+The same compiled feature head can predict a full functional-connectivity
+matrix and the network's phase-order metastability. The comparison below is a
+seeded, synthetic 24-region Hopf SDDE experiment. The coupling sweep is
+**in-distribution interpolation**: the latent connectome is represented in
+the one-time simulation budget and the displayed `k` values fill in between
+the budget's coupling grid. It demonstrates feature-extraction throughput,
+not out-of-distribution or biological generalization.
+
+![Ground-truth versus compiled-surrogate functional connectivity](docs/figures/fc_ground_truth_vs_surrogate.png)
+
+At `k=0.26`, the FC matrix's mean absolute error is 0.055.
+
+![Ground-truth versus compiled-surrogate metastability sweep](docs/figures/metastability_ground_truth_vs_surrogate.png)
+
+For these combined FC + metastability features (24 regions, 1,200 SDDE steps):
+
+| Workload | SDDE | Compiled surrogate | Speedup |
+|---|---:|---:|---:|
+| One feature evaluation | 83.809 ms | 0.025 ms | **3,333×** |
+| 16-point global-coupling sweep | 2.874 s | 0.236 ms | **12,176×** |
+
+The sweep's metastability MAE is 0.044. Exact seed, parameter range,
+simulation length, target standardization, and timings are stored in
+[`docs/figures/dynamics_feature_benchmark.json`](docs/figures/dynamics_feature_benchmark.json);
+regenerate all assets with:
+
+```bash
+python bench/generate_readme_dynamics_figures.py
+```
+
 ## How it works
 
 ```mermaid
