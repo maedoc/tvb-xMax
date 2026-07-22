@@ -18,7 +18,6 @@ from __future__ import annotations
 from typing import Any
 
 from ..ir import IRSpec, SwapKind
-from . import pipeline
 
 
 def swap_parcellation(spec: IRSpec, connectivity: Any, parcellation: str) -> IRSpec:

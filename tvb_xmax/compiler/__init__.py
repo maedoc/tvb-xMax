@@ -14,13 +14,21 @@ compiled artifact serves any parcellation, any parameters, for free.
 """
 
 from .. import ir
-from . import frontend, lower, optimize, codegen, vectorize, posterior, pipeline, swap, sim_budget
+from . import frontend, posterior, swap
 from .artifact_cache import ArtifactCache
 from ..ir import IRSpec, IRProgram, CompiledArtifact, CompileReport, SimBudget, SwapKind
 
 __all__ = [
-    "ir", "frontend", "lower", "optimize", "codegen", "vectorize",
-    "posterior", "pipeline", "swap", "sim_budget",
+    "ir", "frontend", "posterior", "swap",
     "ArtifactCache",
     "IRSpec", "IRProgram", "CompiledArtifact", "CompileReport", "SimBudget", "SwapKind",
 ]
+
+
+def __getattr__(name):
+    """Load the JAX compiler modules only when their API is requested."""
+    if name in {"lower", "optimize", "codegen", "vectorize", "pipeline", "sim_budget",
+                "numpy_lower", "numpy_codegen", "numpy_vectorize", "numpy_pipeline"}:
+        import importlib
+        return importlib.import_module(f"{__name__}.{name}")
+    raise AttributeError(name)

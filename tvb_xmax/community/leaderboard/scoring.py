@@ -74,9 +74,19 @@ def c2st_score(posterior_samples, reference_samples) -> float:
     draws; accuracy 0.5 means they match.  We return 1-accuracy so
     1.0=perfect match (good), 0.5=random.
     """
-    try:
-        from sbi.diagnostics import c2st as _c2st
-        acc = _c2st(posterior_samples, reference_samples)
-        return float(1.0 - acc)
-    except Exception:
+    import numpy as np
+    posterior_samples = np.asarray(posterior_samples)
+    reference_samples = np.asarray(reference_samples)
+    split = max(1, min(len(posterior_samples), len(reference_samples)) // 2)
+    posterior_samples = posterior_samples[:2 * split]
+    reference_samples = reference_samples[:2 * split]
+    c0 = posterior_samples[:split].mean(axis=0)
+    c1 = reference_samples[:split].mean(axis=0)
+    x = np.concatenate([posterior_samples[split:], reference_samples[split:]])
+    y = np.concatenate([np.zeros(len(posterior_samples) - split),
+                        np.ones(len(reference_samples) - split)])
+    if not len(x):
         return 0.5
+    predicted = (np.sum((x - c1) ** 2, axis=1)
+                 < np.sum((x - c0) ** 2, axis=1))
+    return float(1.0 - np.mean(predicted == y))

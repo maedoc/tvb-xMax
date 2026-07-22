@@ -30,7 +30,7 @@ def test_train_posterior_suppress_progress(toy_sim_budget):
     _, theta, features = toy_sim_budget
     posterior = train_posterior(theta, features, prog=False)
     assert hasattr(posterior, "sample_batched")
-    # Use numpy array (sbi expects torch tensor, converts internally)
+    # Use a NumPy feature batch, matching the in-tree estimator API.
     import numpy as np
     xf_obs = np.ones((1, D_FEAT), dtype=np.float32)
     samples = posterior.sample_batched((5,), x=xf_obs, show_progress_bars=False)
@@ -50,7 +50,7 @@ def test_attach_posterior_binds_sample_fn(toy_sim_budget, toy_nlat, toy_d_feat):
     assert samples.shape == (10, 1, D_PARAM)
 
 
-def test_save_artifact_roundtrip(toy_sim_budget, toy_nlat, toy_d_feat):
+def test_save_artifact_roundtrip(toy_sim_budget, toy_nlat, toy_d_feat, tmp_path):
     artifact = codegen.compile_artifact(
         "hopf", "var", toy_sim_budget, toy_nlat, toy_d_feat, niter=100
     )
@@ -59,7 +59,7 @@ def test_save_artifact_roundtrip(toy_sim_budget, toy_nlat, toy_d_feat):
     theta = jnp.zeros(D_PARAM)
     orig_features = artifact(u, theta)
 
-    fname = "/tmp/opencode/test_posterior_rt.pkl"
+    fname = tmp_path / "test_posterior_rt.pkl"
     save_artifact(artifact, fname)
     try:
         loaded = load_artifact(fname)
@@ -76,14 +76,14 @@ def test_save_artifact_roundtrip(toy_sim_budget, toy_nlat, toy_d_feat):
         os.remove(fname)
 
 
-def test_save_load_preserves_fields(toy_sim_budget, toy_nlat, toy_d_feat):
+def test_save_load_preserves_fields(toy_sim_budget, toy_nlat, toy_d_feat, tmp_path):
     artifact = codegen.compile_artifact(
         "hopf", "var", toy_sim_budget, toy_nlat, toy_d_feat, niter=100
     )
     artifact.param_names = ("a", "b", "c", "d")
     artifact.surrogate_mse = 0.12345
 
-    fname = "/tmp/opencode/test_posterior_fields.pkl"
+    fname = tmp_path / "test_posterior_fields.pkl"
     save_artifact(artifact, fname)
     try:
         loaded = load_artifact(fname)

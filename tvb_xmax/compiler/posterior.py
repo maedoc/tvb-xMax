@@ -1,48 +1,32 @@
-"""Posterior: amortized neural posterior estimation (NPE) over IR.
+"""Posterior: in-tree amortized neural posterior estimation over IR.
 
-Wraps ``sbi`` (the same library apvbt uses) but operates entirely in IR
-space: the posterior is over ``theta`` (normalized parameters) conditioned
-on surrogate-produced features ``xf``.  Because both the surrogate and the
-posterior are amortized, drawing ``10^4`` posterior samples for a new
-subject is a single batched forward pass, not a new round of simulation.
+Uses the lightweight conditional mixture-density implementation adapted from
+``maedoc/tvbl``.  This removes the runtime dependency on both ``sbi`` and
+Torch while retaining batched conditional posterior samples.
 """
 
 from __future__ import annotations
 
-import io
-import contextlib
 import pickle
 import numpy as np
-import torch
 
 from ..ir import CompiledArtifact
+from ..cde import MDNEstimator, MAFEstimator
 
 
-def _to_torch(x, device="cpu"):
-    return torch.from_numpy(np.asarray(x)).float().to(device)
-
-
-def train_posterior(theta, features, algo="maf", device="cpu", prog=True,
-                    **kw):
+def train_posterior(theta, features, algo="mdn", prog=True, **kw):
     """Train an NPE posterior on (theta, features) simulation pairs.
 
-    Thin wrapper over ``sbi.inference.NPE_C``/``NPE_A`` mirroring apvbt's
-    :func:`apvbt.inference.run_sbi`, but the inputs are IR tensors.
+    ``mdn`` and ``maf`` are in-tree, TVBL-derived conditional estimators.
     """
-    from sbi.inference import NPE_C, NPE_A
-    NPE = {"maf": NPE_C, "mdn": NPE_A}[algo]
-    mu = _to_torch(np.mean(theta, axis=0), device)
-    cov = _to_torch(np.cov(theta.T), device)
-    prior = torch.distributions.MultivariateNormal(mu, cov)
-    inference = NPE(prior=prior, show_progress_bars=prog, **kw)
-    inference.append_simulations(_to_torch(theta, device), _to_torch(features, device))
-    if prog:
-        inference.train()
-    else:
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            inference.train()
-    return inference.build_posterior()
+    theta, features = np.asarray(theta), np.asarray(features)
+    estimators = {"mdn": MDNEstimator, "maf": MAFEstimator}
+    if algo not in estimators:
+        raise ValueError(f"unknown posterior algorithm {algo!r}; choose 'mdn' or 'maf'")
+    train_keys = {"n_iter", "learning_rate", "seed"}
+    train_kw = {key: kw.pop(key) for key in tuple(kw) if key in train_keys}
+    estimator = estimators[algo](theta.shape[-1], features.shape[-1], **kw)
+    return estimator.train(theta, features, prog=prog, **train_kw)
 
 
 def attach_posterior(artifact: CompiledArtifact, theta, features, **kw):
@@ -51,10 +35,7 @@ def attach_posterior(artifact: CompiledArtifact, theta, features, **kw):
     posterior = train_posterior(theta, features, **kw)
 
     def sample_fn(xf_obs, n_samples):
-        # sbi posterior.sample_batched((n,), x=...) expects torch tensors
-        x = _to_torch(xf_obs)
-        s = posterior.sample_batched((n_samples,), x=x, show_progress_bars=False)
-        return np.asarray(s)  # (n_samples, B, d_param)
+        return posterior.sample_batched((n_samples,), x=xf_obs)
 
     artifact.posterior_sample = sample_fn
     return artifact
@@ -109,9 +90,7 @@ def compute_c2st(artifact, theta, features, n_samples=100):
     """
     if artifact.posterior_sample is None:
         return float("nan")
-    from sbi.utils.metrics import c2st as _c2st
     import numpy as np
-    import torch
 
     theta = np.asarray(theta)
     features = np.asarray(features)
@@ -129,9 +108,20 @@ def compute_c2st(artifact, theta, features, n_samples=100):
         dap[j] = np.asarray(post)[0, 0]
         true[j] = theta[ix]
 
-    acc = _c2st(torch.from_numpy(dap).float(),
-                torch.from_numpy(true).float())
-    return float(acc)
+    # A dependency-free C2ST: nearest-centroid classifier evaluated on a
+    # deterministic hold-out split.  0.5 is indistinguishable; 1.0 is bad.
+    split = max(1, n_test // 2)
+    train = np.concatenate([dap[:split], true[:split]])
+    labels = np.concatenate([np.zeros(split), np.ones(split)])
+    centroid0 = train[labels == 0].mean(axis=0)
+    centroid1 = train[labels == 1].mean(axis=0)
+    test = np.concatenate([dap[split:], true[split:]])
+    expected = np.concatenate([np.zeros(n_test - split), np.ones(n_test - split)])
+    if not len(test):
+        return float("nan")
+    predicted = (np.sum((test - centroid1) ** 2, axis=1)
+                 < np.sum((test - centroid0) ** 2, axis=1)).astype(float)
+    return float(np.mean(predicted == expected))
 
 
 def save_artifact(artifact: CompiledArtifact, fname: str) -> None:
@@ -142,8 +132,8 @@ def save_artifact(artifact: CompiledArtifact, fname: str) -> None:
     ``head_params`` via :func:`codegen.rebuild_apply_fns`, so the surrogate
     round-trips with bit-identical outputs.
 
-    The ``posterior_sample`` callable wraps an ``sbi`` posterior, which is
-    NOT picklable; it is dropped on save and set to ``None`` on load.  To
+    The ``posterior_sample`` callable closes over a trained estimator, which
+    is NOT picklable; it is dropped on save and set to ``None`` on load.  To
     restore posterior sampling after ``load_artifact``, call
     :func:`attach_posterior` again (cheap: reuses the same sim budget).
     """

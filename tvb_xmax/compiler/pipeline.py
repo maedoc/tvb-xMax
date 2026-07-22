@@ -29,7 +29,7 @@ def _unpack_sim_pairs(sim_pairs):
 
 def compile_spec(spec: IRSpec, crosscoder, sim_pairs, d_feat: int,
                  mvn=None, train_posterior: bool = True,
-                 algo: str = "maf", **codegen_kw) -> CompileReport:
+                 algo: str = "mdn", **codegen_kw) -> CompileReport:
     """Full compile: produce a :class:`CompiledArtifact` from a spec + sims.
 
     Args:

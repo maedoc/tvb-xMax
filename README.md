@@ -6,12 +6,12 @@
 
 > **Compile a virtual-brain simulation budget once. Run surrogate inference thereafter.**
 
-[![Python](https://img.shields.io/badge/python-%3E%3D3.10-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
 [![JAX](https://img.shields.io/badge/JAX-0.10-ff6f00.svg?logo=google&logoColor=white)](https://github.com/jax-ml/jax)
 [![Tests](https://img.shields.io/badge/tests-141%20passed-2ea44f.svg)](tests)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-`tvb-xMax` is a rigorous parody of an "advanced AI math compiler" for virtual-brain simulation. Under the parody is a practical system: it learns a neural surrogate from a one-time simulation budget, treats a parcellation-invariant cross-coder latent as its intermediate representation, and replaces repeated SDE evaluations with batched JAX forward passes.
+`tvb-xMax` is a rigorous parody of an "advanced AI math compiler" for virtual-brain simulation. Under the parody is a practical system: it learns a neural surrogate from a one-time simulation budget, treats a parcellation-invariant cross-coder latent as its intermediate representation, and replaces repeated SDDE feature evaluations with compiled forward passes.
 
 The compiler does **not** make scientific validation free. It makes the repeated evaluation of a validated, trained surrogate cheap.
 
@@ -56,34 +56,31 @@ At runtime, no SDE is integrated. The fast path is:
 IRSpec -> lower -> optimize -> surrogate(u, theta) -> optional posterior samples
 ```
 
-## Measured performance
+## Measured feature-prediction performance
 
-The current benchmark is deliberately explicit about its setup:
+The meaningful fast-path comparison is a long SDDE feature evaluation versus
+one compiled surrogate feature prediction. On the portable NumPy backend:
 
-- Hopf oscillator SDE implemented with `vbjax.make_sde`
-- 76 regions
-- temporal-variance features
-- 2-layer, width-128 tanh trunk + linear feature head
-- CPU timing, with synchronized JAX execution on both paths
-- synthetic cross-coder and synthetic training budget: this is a throughput benchmark, **not** a biological-fidelity result
+| Workload | Time |
+|---|---:|
+| Stochastic delayed Hopf simulation, 76 regions, 10,000 steps | 2.398 s |
+| One compiled surrogate feature prediction | 0.024 ms |
+| Feature-prediction speedup | **98,209×** |
 
-| Integration steps | Workload | SDE time | Surrogate time | Measured speedup |
-|---:|---|---:|---:|---:|
-| 1,000 | One feature evaluation | 5.994 ms | 0.048 ms | 125.9x |
-| 5,000 | One feature evaluation | 20.684 ms | 0.078 ms | 266.1x |
-| 10,000 | One feature evaluation | 20.664 ms | 0.060 ms | **343.2x** |
-| 5,000 | Batch of 4,096 | 74.158 s | 44.446 ms | 1,668.5x |
-| 10,000 | Batch of 4,096 | 98.915 s | 45.287 ms | **2,184.2x** |
+This is a seeded CPU throughput benchmark using a synthetic 76-region
+connectome, TVBL-style delayed Heun integration, normalized Hopf parameters,
+and a 2×128 tanh surrogate. It measures **feature prediction only**. The
+synthetic training budget means it does not establish surrogate fidelity or
+biological validity.
 
-The direct single-call headline is **about 300x** for a 10,000-step SDE: the latest run measured 20.664 ms for one simulation versus 0.060 ms for one warmed, compiled surrogate forward pass. A 4,096-simulation budget for the same workload took 84.6 seconds; the compiled forward path yields an estimated **1.41 million x amortized throughput advantage** when comparing a fresh budget with one already-compiled forward pass.
-
-Read the full reproducible output in [`bench/results.md`](bench/results.md) or rerun it:
+Reproduce it with:
 
 ```bash
-python bench/bench_hopf_speedup.py
+python bench/bench_portable_long_sdde.py
 ```
 
-> Performance varies with integration length, parcellation size, hardware, batching, and simulator implementation. Treat the table as a benchmark configuration, not a universal claim.
+See the complete configuration in
+[`bench/portable_feature_prediction.md`](bench/portable_feature_prediction.md).
 
 ## How it works
 
@@ -144,17 +141,35 @@ The surrogate has a shared trunk and feature-specific linear head, so feature wo
 
 ## Quick start
 
-Install the compiler and optional SBI tooling:
+Install the compiler with development tooling:
 
 ```bash
-pip install -e ".[sbi,dev]"
+uv sync --extra dev
 ```
 
 Or install dependencies directly:
 
 ```bash
-pip install jax jaxlib numpy optax vbjax sbi torch fastapi uvicorn pydantic
+pip install jax jaxlib numpy autograd optax tqdm vbjax
 ```
+
+### Portable NumPy path
+
+The default runtime depends only on NumPy, SciPy, Autograd, and tqdm. It
+supports lowering, surrogate compile/inference, CPU batch evaluation, cached
+artifacts, MDN/MAF posterior estimation, and the TVBL-style delayed Heun
+simulator. Install the optional `jax` extra only for JAX/vbjax training and
+multi-device execution.
+
+```python
+from tvb_xmax.compiler import numpy_pipeline
+
+report = numpy_pipeline.compile_spec(spec, crosscoder, budget, d_feat=XF.shape[-1])
+out = numpy_pipeline.run(report.artifact, spec, crosscoder)
+```
+
+See [`bench/numpy_backend_results.md`](bench/numpy_backend_results.md) for
+the current portable-versus-JAX forward benchmark.
 
 Run the examples:
 
@@ -252,7 +267,7 @@ Add another target by implementing a `SurrogateTarget` and registering its param
 `tvb-xMax` depends on:
 
 - [`vbjax`](https://github.com/ins-amu/vbjax) for JAX-oriented connectome and SDE primitives
-- [`sbi`](https://github.com/mackelab/sbi) for optional neural posterior estimation
+- the in-tree conditional MDN, adapted from [`tvbl`](https://github.com/maedoc/tvbl), for neural posterior estimation without Torch or `sbi`
 - extracted, minimal apvbt-compatible utilities under [`tvb_xmax/_apvbt`](tvb_xmax/_apvbt) for cross-coder and simulation-budget interoperability
 
 The project uses `vbjax` and simulation code at compile time; it uses the compiled surrogate at inference time.
@@ -267,4 +282,4 @@ See [`PLAN.md`](PLAN.md) for the full architecture, evidence, and roadmap. See [
 
 ## License
 
-MIT. `vbjax`, `sbi`, and extracted apvbt-compatible code retain their respective upstream licenses.
+MIT. `vbjax`, `tvbl`, and extracted apvbt-compatible code retain their respective upstream licenses.

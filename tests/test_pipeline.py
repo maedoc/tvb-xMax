@@ -115,11 +115,6 @@ class TestPipeline:
     @pytest.mark.slow
     def test_run_with_posterior(self, toy_crosscoder, toy_sim_budget,
                                 toy_nlat, toy_d_feat):
-        try:
-            import sbi  # noqa: F401
-        except ImportError:
-            pytest.skip("sbi not installed")
-
         spec = ir.IRSpec(
             model="hopf",
             connectivity=jnp.zeros(toy_nlat),
@@ -131,7 +126,7 @@ class TestPipeline:
         )
         report = pipeline.compile_spec(
             spec, toy_crosscoder, toy_sim_budget, toy_d_feat,
-            train_posterior=True, algo="maf",
+            train_posterior=True, algo="mdn",
         )
         artifact = report.artifact
         out = pipeline.run(artifact, spec, toy_crosscoder)

@@ -16,7 +16,6 @@ from typing import Dict, List, Optional, Tuple
 
 from ..ir import CompileReport, CompiledArtifact, IRSpec
 from ..surrogates import get_surrogate
-from . import pipeline
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +85,9 @@ class ArtifactCache:
                 artifact=cached,
                 stages={"cache": "hit"},
             )
+        # Keep the cache importable in the portable install; the JAX pipeline
+        # is needed only when a cache miss actually compiles an artifact.
+        from . import pipeline
         report = pipeline.compile_spec(
             spec, crosscoder, sim_pairs, d_feat, mvn=mvn, **compile_kw)
         report.stages["cache"] = "miss"

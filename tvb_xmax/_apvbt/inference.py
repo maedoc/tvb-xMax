@@ -1,10 +1,8 @@
 # Extracted from apvbt (https://github.com/ins-amu/apvbt) — see vendor/README.md
-import io
-import contextlib
 import pickle
 import numpy as np
-import torch
-from sbi.inference import NPE_C, NPE_A
+
+from ..cde import MDNEstimator
 
 
 def uniform_var(a, b):
@@ -12,39 +10,21 @@ def uniform_var(a, b):
 
 
 def to_torch(x, device="cpu"):
-    import torch
+    """Compatibility shim retained for old apvbt callers.
 
-    return torch.from_numpy(np.array(x)).float().to(device=device)
-
-
-def _run_sbi(theta, features, prog, algo_args):
-    "actually run SBI"
-    device = algo_args.get("device", "cpu")
-    NPE = {
-        "maf": NPE_C,
-        "mdn": NPE_A,
-    }[algo_args.pop("algo", "maf")]
-    mu = to_torch(np.mean(theta, axis=0), device=device)
-    cov = to_torch(np.cov(theta.T), device=device)
-    prior = torch.distributions.MultivariateNormal(mu, cov)
-    inference = NPE(prior=prior, show_progress_bars=prog, **algo_args)
-    inference.append_simulations(
-        to_torch(theta, device=device), to_torch(features, device=device)
-    )
-    inference.train()
-    posterior = inference.build_posterior()
-    return posterior
+    tvb-xMax no longer uses Torch; callers receive a float32 NumPy array.
+    """
+    return np.asarray(x, dtype=np.float32)
 
 
 def run_sbi(theta, features, fname=None, prog=True, **algo_args):
-    "convenience wrapper for SBI."
-
-    if prog:
-        posterior = _run_sbi(theta, features, prog, algo_args)
-    else:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            posterior = _run_sbi(theta, features, prog, algo_args)
+    """Compatibility wrapper using tvb-xMax's in-tree conditional MDN."""
+    algo = algo_args.pop("algo", "mdn")
+    if algo != "mdn":
+        raise ValueError("only the in-tree 'mdn' posterior is available")
+    theta, features = np.asarray(theta), np.asarray(features)
+    posterior = MDNEstimator(theta.shape[-1], features.shape[-1], **algo_args)
+    posterior.train(theta, features, prog=prog)
 
     if fname:
         with open(fname, "wb") as fd:
@@ -54,8 +34,9 @@ def run_sbi(theta, features, fname=None, prog=True, **algo_args):
 
 
 def posterior_diags(p_us, po_us, true_us):
-    po_u = np.mean(po_us.numpy(), axis=0)
-    po_sd = np.std(po_us.numpy(), axis=0)
+    po_us = np.asarray(po_us)
+    po_u = np.mean(po_us, axis=0)
+    po_sd = np.std(po_us, axis=0)
     po_z = np.abs((po_u - true_us) / po_sd)
     p_var = np.var(p_us, axis=0) if hasattr(p_us, "size") else uniform_var(*p_us)
     po_shrink = np.array(1 - po_sd**2 / p_var)

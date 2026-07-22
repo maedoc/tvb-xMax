@@ -46,7 +46,7 @@ def batched_posterior(artifact: CompiledArtifact, xf_obs: jax.Array,
     if artifact.posterior_sample is None:
         raise RuntimeError("artifact has no trained posterior; target='features' only")
     f = artifact.posterior_sample
-    # the sbi posterior already supports sample_batched((n,), x=...)
+    # The in-tree posterior exposes the same batched sampling shape.
     return f(xf_obs, n_samples)
 
 

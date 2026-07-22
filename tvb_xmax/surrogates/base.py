@@ -63,8 +63,8 @@ class SurrogateTarget:
                 if v < pdef.bounds[0] or v > pdef.bounds[1]:
                     errors.append(f"{name}={v} out of bounds {pdef.bounds}")
             else:  # array
-                import jax.numpy as jnp
-                arr = jnp.asarray(v)
+                import numpy as np
+                arr = np.asarray(v)
                 if arr.min() < pdef.bounds[0] or arr.max() > pdef.bounds[1]:
                     errors.append(f"{name} has values out of bounds {pdef.bounds}")
         return errors

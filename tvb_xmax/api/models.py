@@ -26,7 +26,7 @@ class CompileRequest(BaseModel):
     sim_budget: int = 4096
     nlat: int = 16
     train_posterior: bool = True
-    algo: str = "maf"
+    algo: str = "mdn"
 
 
 class InferRequest(BaseModel):

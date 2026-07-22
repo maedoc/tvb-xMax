@@ -21,8 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Sequence, Tuple
 
-import jax
-import jax.numpy as jnp
+import numpy as np
 
 __all__ = [
     "IRSpec",
@@ -72,9 +71,9 @@ class SimBudget:
     Produced by apvbt's sample_model / sample_subj_model, or by the user's
     own simulation pipeline. Contains matched (U, Theta, XF) triples.
     """
-    U: jax.Array          # (n_budget, nlat) latent codes
-    Theta: jax.Array      # (n_budget, d_param) normalized parameters in [0,1]
-    XF: jax.Array         # (n_budget, d_feat) simulated features
+    U: Any                # (n_budget, nlat) latent codes
+    Theta: Any            # (n_budget, d_param) normalized parameters in [0,1]
+    XF: Any               # (n_budget, d_feat) simulated features
     model: str = ""       # model name the budget was generated for
     feature: str = ""     # feature extraction name
     nlat: int = 0         # latent dimension
@@ -110,8 +109,8 @@ class IRProgram:
     """
 
     model: str
-    u: jax.Array                  # (nlat,) latent connectome code
-    theta: jax.Array              # (d_param,) normalized parameter vector in [0,1]
+    u: Any                        # (nlat,) latent connectome code
+    theta: Any                    # (d_param,) normalized parameter vector in [0,1]
     param_names: Tuple[str, ...]  # ordered names matching theta
     feature: str
     target: str
@@ -142,8 +141,9 @@ class CompiledArtifact:
     model: str
     feature: str
     nlat: int
-    surrogate_apply: Callable[[jax.Array, jax.Array], jax.Array]  # (u,theta)->xf
-    posterior_sample: Optional[Callable[[jax.Array, jax.Array, int], jax.Array]] = None
+    surrogate_apply: Callable[[Any, Any], Any]  # (u,theta)->xf
+    posterior_sample: Optional[Callable[[Any, int], Any]] = None
+    backend: str = "jax"              # 'jax' or portable NumPy backend
     param_names: Tuple[str, ...] = ()
     param_bounds: Tuple[Tuple[float, float], ...] = ()
     # trunk / head split (enables cheap feature swap: reuse trunk, retrain head)
@@ -158,7 +158,7 @@ class CompiledArtifact:
     train_sim_budget: int = 0           # how many real sims were spent
     compile_seconds: float = 0.0
 
-    def __call__(self, u: jax.Array, theta: jax.Array) -> jax.Array:
+    def __call__(self, u: Any, theta: Any) -> Any:
         """Evaluate the compiled surrogate: features = f(latent, params)."""
         return self.surrogate_apply(u, theta)
 
@@ -167,7 +167,7 @@ class CompiledArtifact:
 
         ``surrogate_apply`` / ``trunk_apply`` / ``head_apply`` are closures
         over JAX params and cannot be pickled.  ``posterior_sample`` wraps an
-        ``sbi`` posterior (torch-backed) which is also not picklable; it is
+        posterior sampler closure is also not picklable; it is
         dropped here and must be re-attached via
         :func:`posterior.attach_posterior` after load.
         """
@@ -182,7 +182,10 @@ class CompiledArtifact:
         """Restore fields and rebuild apply closures from stored params."""
         self.__dict__.update(d)
         if self.trunk_params is not None and self.head_params is not None:
-            from .compiler.codegen import rebuild_apply_fns
+            if getattr(self, "backend", "jax") == "numpy":
+                from .compiler.numpy_codegen import rebuild_apply_fns
+            else:
+                from .compiler.codegen import rebuild_apply_fns
             (self.surrogate_apply,
              self.trunk_apply,
              self.head_apply) = rebuild_apply_fns(self.trunk_params,
