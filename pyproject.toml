@@ -3,31 +3,38 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tvb-max"
+name = "tvb-xMax"
 version = "0.1.0"
 description = "Advanced AI math compiler for virtual brain simulation (parody over apvbt+vbjax)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
-    "jax",
-    "jaxlib",
-    "numpy",
-    "scipy",
-    # vbjax and apvbt are VENDORED under vendor/ (see vendor/README.md),
-    # not pip-installed. tvb_max/__init__.py puts vendor/ on sys.path.
+    "jax>=0.10,<0.11",
+    "jaxlib>=0.10,<0.11",
+    "numpy>=2.0,<3",
+    "optax>=0.2,<0.3",
+    "vbjax>=0.0.19,<0.1",
 ]
 
 [project.optional-dependencies]
-sbi = ["sbi", "torch"]
-api = ["fastapi", "uvicorn", "pydantic"]
-community = ["discord.py"]
-dev = ["pytest", "pytest-cov", "mkdocs-material"]
+sbi = ["sbi>=0.25,<0.26", "torch>=2.5,<2.6"]
+api = ["fastapi>=0.129,<0.130", "uvicorn>=0.40,<0.41", "pydantic>=2.12,<3"]
+community = ["discord.py>=2.4,<3"]
+dev = ["pytest>=8,<9", "pytest-cov>=5,<6", "mkdocs-material>=9,<10"]
 
 [project.scripts]
-tvbmax = "tvb_max.cli:main"
+tvbxmax = "tvb_xmax.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tvb_xmax*"]
+exclude = ["vendor*", "tests*", "examples*"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests", "tvb_xmax", "examples"]
+norecursedirs = ["vendor"]
+addopts = "-q"
+# For coverage gate, run: pytest --cov=tvb_xmax.compiler --cov=tvb_xmax.ir --cov-report=term-missing --cov-fail-under=80
 markers = [
     "slow: marks tests that need the large HCP/1KB dataset or real sims",
 ]

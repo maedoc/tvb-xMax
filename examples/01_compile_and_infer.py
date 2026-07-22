@@ -1,16 +1,16 @@
 """Example: compile a Hopf surrogate and run the fast path.
 
-This is the "hello world" of tvb-max.  It shows the full compiler pipeline:
+This is the "hello world" of tvb-xMax.  It shows the full compiler pipeline:
 frontend -> lower -> optimize -> codegen -> posterior, then a fast inference
 run that replaces the SDE simulation with a single forward pass.
 
 Run: python examples/01_compile_and_infer.py
 """
-import tvb_max  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
+import tvb_xmax  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
 import jax.numpy as jnp
 import vbjax as vb
 
-from tvb_max.compiler import ir, pipeline
+from tvb_xmax.compiler import ir, pipeline
 
 
 def make_fake_sim_budget(nlat, d_param, d_feat, n=4096, key=vb.key):
@@ -24,7 +24,7 @@ def make_fake_sim_budget(nlat, d_param, d_feat, n=4096, key=vb.key):
     U = vb.randn(n, nlat, key=key) * 0.3
     Theta = vb.rand(n, d_param, key=key)
     # toy "simulation": features = nonlinear function of (u, theta)
-    XF = jnp.concatenate([U[:, :d_feat], Theta[:, :d_feat]], axis=1)
+    XF = jnp.tanh(U[:, :d_feat] + 0.3 * Theta[:, :1])
     return U, Theta, XF
 
 
@@ -38,7 +38,7 @@ def main():
     cc.train(nlat=nlat, niter=50, show_progress=False) if hasattr(cc, "show_progress") else cc.train(nlat=nlat, niter=50)
 
     # 2. one-time simulation budget (the only place real sims happen)
-    surr = tvb_max.surrogates.get_surrogate("hopf")
+    surr = tvb_xmax.surrogates.get_surrogate("hopf")
     d_param = len(surr.param_names)
     sim_pairs = make_fake_sim_budget(nlat, d_param, d_feat)
 

@@ -7,11 +7,11 @@ select a different pre-compiled artifact from the registry.
 
 Run: python examples/02_swaps.py
 """
-import tvb_max  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
+import tvb_xmax  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
 import jax.numpy as jnp
 import vbjax as vb
 
-from tvb_max.compiler import ir, pipeline, swap
+from tvb_xmax.compiler import ir, pipeline, swap
 
 
 def compile_toy(model, nlat=16, d_feat=8):
@@ -21,11 +21,11 @@ def compile_toy(model, nlat=16, d_feat=8):
     cc.add_view(np.random.randn(20, nlat), "079-Shen2013", normalize="center")
     cc.tts = 10
     cc.train(nlat=nlat, niter=50)
-    surr = tvb_max.surrogates.get_surrogate(model)
+    surr = tvb_xmax.surrogates.get_surrogate(model)
     d_param = len(surr.param_names)
     U = vb.randn(1024, nlat) * 0.3
     Theta = vb.rand(1024, d_param)
-    XF = jnp.concatenate([U[:, :d_feat], Theta[:, :d_feat]], axis=1)
+    XF = jnp.tanh(U[:, :d_feat] + 0.3 * Theta[:, :1])
     spec = ir.IRSpec(model=model, connectivity=jnp.zeros(nlat),
                      connectivity_is_latent=True, parameters=surr.default_parameters())
     return pipeline.compile_spec(spec, cc, (U, Theta, XF), d_feat,

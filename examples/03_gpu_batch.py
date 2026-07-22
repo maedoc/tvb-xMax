@@ -5,12 +5,12 @@ batch of (u, theta) pairs in one shot, and benchmarking the speedup vs
 the real simulation.  This is where the ~10^3-10^4x amortized speedup
 shows up.
 """
-import tvb_max  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
+import tvb_xmax  # noqa: F401  (puts vendored vbjax/apvbt on sys.path)
 import time
 import jax.numpy as jnp
 import vbjax as vb
 
-from tvb_max.compiler import ir, pipeline, vectorize
+from tvb_xmax.compiler import ir, pipeline, vectorize
 
 
 def main():
@@ -20,11 +20,11 @@ def main():
     cc.add_view(np.random.randn(20, nlat), "079-Shen2013", normalize="center")
     cc.tts = 10
     cc.train(nlat=nlat, niter=50)
-    surr = tvb_max.surrogates.get_surrogate("hopf")
+    surr = tvb_xmax.surrogates.get_surrogate("hopf")
     d_param = len(surr.param_names)
     U = vb.randn(4096, nlat) * 0.3
     Theta = vb.rand(4096, d_param)
-    XF = jnp.concatenate([U[:, :d_feat], Theta[:, :d_feat]], axis=1)
+    XF = jnp.tanh(U[:, :d_feat] + 0.3 * Theta[:, :1])
     spec = ir.IRSpec(model="hopf", connectivity=jnp.zeros(nlat),
                      connectivity_is_latent=True, parameters=surr.default_parameters())
     art = pipeline.compile_spec(spec, cc, (U, Theta, XF), d_feat,

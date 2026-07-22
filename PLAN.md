@@ -1,19 +1,19 @@
-# tvb-max: Development Plan
+# tvb-xMax: Development Plan
 
-> **tvb-max** — an "advanced AI math compiler" for virtual brain simulation that produces nearly-infinite speedup next to existing fast simulations, by **swapping features and parameters during the simulation-based inference (SBI) step** and sampling the posterior over data features *as if we simulated the model*.
+> **tvb-xMax** — an "advanced AI math compiler" for virtual brain simulation that produces nearly-infinite speedup next to existing fast simulations, by **swapping features and parameters during the simulation-based inference (SBI) step** and sampling the posterior over data features *as if we simulated the model*.
 
-This document is the bootstrapping plan for the `~/src/tvb-max` repository. It is organized in two parts, per the founding brief:
+This document is the bootstrapping plan for the `~/src/tvb-xMax` repository. It is organized in two parts, per the founding brief:
 
 - **Part I — The Compiler** (concrete, code-grounded, comes first)
 - **Part II — The Community Bootstrap** (API, docs site, Discord + openclaw agents, leaderboard, examples)
 
-tvb-max is a *parody* in tone but a *real, buildable* system in substance. Every "compiler" stage below maps to actual code already scaffolded in `tvb_max/`, and every claim about speedup is grounded in the measured costs of the underlying `vbjax` simulations and `apvbt` SBI pipeline it wraps.
+tvb-xMax is a *parody* in tone but a *real, buildable* system in substance. Every "compiler" stage below maps to actual code already scaffolded in `tvb_xmax/`, and every claim about speedup is grounded in the measured costs of the underlying `vbjax` simulations and `apvbt` SBI pipeline it wraps.
 
 ---
 
 ## 0. The core idea (one paragraph)
 
-In standard SBI you pay a simulation tax: for every parameter sample `θ` you integrate a brain dynamics SDE (`vbjax.make_sde` + `mpr_dfun`/`hopf_dfun`/…) for seconds, extract features `xf`, then train a neural posterior `p(θ | xf)`. tvb-max **compiles that simulation away**: a one-time simulation budget trains a neural **surrogate** `xf ≈ S(u, θ)` that maps the cross-coder latent `u` plus normalized parameters directly to features. Because `u` is parcellation-invariant (the cross-coder maps 20 parcellations into one shared latent), a *single* compiled artifact serves **any connectivity, any parameters, any parcellation** — swapping them is a free re-evaluation of the same net. Inference becomes a batched GPU forward pass (~ms for 10⁴ samples) instead of 10⁴ SDE integrations (~hours), i.e. "nearly infinite" amortized speedup. The posterior is itself amortized, so drawing samples for a new subject is also free.
+In standard SBI you pay a simulation tax: for every parameter sample `θ` you integrate a brain dynamics SDE (`vbjax.make_sde` + `mpr_dfun`/`hopf_dfun`/…) for seconds, extract features `xf`, then train a neural posterior `p(θ | xf)`. tvb-xMax **compiles that simulation away**: a one-time simulation budget trains a neural **surrogate** `xf ≈ S(u, θ)` that maps the cross-coder latent `u` plus normalized parameters directly to features. Because `u` is parcellation-invariant (the cross-coder maps 20 parcellations into one shared latent), a *single* compiled artifact serves **any connectivity, any parameters, any parcellation** — swapping them is a free re-evaluation of the same net. Inference becomes a batched GPU forward pass (~ms for 10⁴ samples) instead of 10⁴ SDE integrations (~hours), i.e. "nearly infinite" amortized speedup. The posterior is itself amortized, so drawing samples for a new subject is also free.
 
 ---
 
@@ -21,11 +21,11 @@ In standard SBI you pay a simulation tax: for every parameter sample `θ` you in
 
 ## 1. Compiler architecture overview
 
-tvb-max maps a classical compiler pipeline onto amortized SBI. The table is the contract every stage implements; the right column points at the scaffolded module.
+tvb-xMax maps a classical compiler pipeline onto amortized SBI. The table is the contract every stage implements; the right column points at the scaffolded module.
 
-| Compiler stage | tvb-max meaning | Input → Output | Module |
+| Compiler stage | tvb-xMax meaning | Input → Output | Module |
 |---|---|---|---|
-| **source program** | user spec: model + connectivity + params + feature + target | `IRSpec` | `tvb_max/ir.py` |
+| **source program** | user spec: model + connectivity + params + feature + target | `IRSpec` | `tvb_xmax/ir.py` |
 | **frontend** (parse/validate) | resolve model from registry, validate params against `ParameterSpace` | `IRSpec → IRSpec` | `compiler/frontend.py` |
 | **lower** (to IR) | cross-code connectivity → parcellation-invariant latent `u`; normalize params to `[0,1]ᵈ` | `IRSpec → IRProgram` | `compiler/lower.py` |
 | **optimize** (IR transforms) | whiten `u` against cohort MVN; summarize heterogeneous params so input dim is parcellation-invariant | `IRProgram → IRProgram` | `compiler/optimize.py` |
@@ -39,7 +39,7 @@ The **intermediate representation (IR)** is the pair `(u, θ)` where:
 - `u ∈ ℝⁿˡᵃᵗ` is the cross-coder latent (parcellation-invariant),
 - `θ ∈ [0,1]ᵈ` is the normalized parameter vector (model-invariant scale).
 
-Everything downstream of `lower` operates *only* on IR tensors, which is what makes the swaps free. The IR dataclasses live in `tvb_max/ir.py` (`IRSpec`, `IRProgram`, `CompiledArtifact`, `CompileReport`, `SwapKind`).
+Everything downstream of `lower` operates *only* on IR tensors, which is what makes the swaps free. The IR dataclasses live in `tvb_xmax/ir.py` (`IRSpec`, `IRProgram`, `CompiledArtifact`, `CompileReport`, `SwapKind`).
 
 ## 2. Why the cross-coder is the IR
 
@@ -50,17 +50,17 @@ encode:  u = c_parc @ W_enc + b_enc          (parc p → latent)
 decode:  c'_parc = u @ W_dec + b_dec          (latent → parc p)
 ```
 
-The cross-prediction loss forces `u` to be the *common information* across parcellations, so a connectome in `079-Shen2013` and the same subject's connectome in `150-Destrieux` encode to (nearly) the same `u`. This is exactly the property an IR needs: **parcellation-invariance**. tvb-max exploits it three ways:
+The cross-prediction loss forces `u` to be the *common information* across parcellations, so a connectome in `079-Shen2013` and the same subject's connectome in `150-Destrieux` encode to (nearly) the same `u`. This is exactly the property an IR needs: **parcellation-invariance**. tvb-xMax exploits it three ways:
 
 1. **Any connectivity in**: a user supplies a matrix in *any* known parcellation; `lower` encodes it to `u` and the rest of the pipeline never sees the parcellation again.
 2. **Cohort prior**: `CrossCoder.calc_mvn(arch)` gives a `MvNorm(u_mean, u_cov)` over the cohort, which `optimize.condition_latent` uses to whiten new subjects into the training distribution — no re-simulation needed to handle a new cohort.
 3. **Swap for free**: changing parcellation = re-encode → new `u` → same artifact. The artifact's weights don't depend on parcellation, only on `nlat`.
 
-The cross-coder is already trained once (apvbt does this on HCP+1000Brains, ~50 min). tvb-max reuses that artifact directly; it does **not** retrain the cross-coder.
+The cross-coder is already trained once (apvbt does this on HCP+1000Brains, ~50 min). tvb-xMax reuses that artifact directly; it does **not** retrain the cross-coder.
 
 ## 3. The "swapping" — the central joke and the central feature
 
-The brief asks for "swapping features and parameters during the SBI step." In tvb-max this is literal and free, because the compiled artifact is a function of IR tensors only:
+The brief asks for "swapping features and parameters during the SBI step." In tvb-xMax this is literal and free, because the compiled artifact is a function of IR tensors only:
 
 | Swap | What changes | Cost | Reuses artifact? |
 |---|---|---|---|
@@ -77,7 +77,7 @@ The "sample the posterior over data features as if we simulated the model" line 
 
 Grounded in `apvbt/README.md` performance table and `vbjax` SDE costs:
 
-| Operation | Real sim (vbjax) | tvb-max surrogate | Speedup |
+| Operation | Real sim (vbjax) | tvb-xMax surrogate | Speedup |
 |---|---|---|---|
 | 1 feature eval (batch 128, 8-core pmap) | 1–10 s | ~0.1–1 ms (MLP fwd, GPU) | **10³–10⁴×** |
 | SBI training budget (4096 sims) | 32–320 s | 0 (amortized) | ∞ (one-time) |
@@ -90,7 +90,7 @@ The "maxest speedup" / "batch eval on GPU" line = `vectorize.sharded_features` (
 
 ## 5. Concrete module contracts
 
-### 5.1 `tvb_max/ir.py` — the IR dataclasses
+### 5.1 `tvb_xmax/ir.py` — the IR dataclasses
 
 ```python
 IRSpec            # source program: model, connectivity, parameters, feature, target
@@ -100,7 +100,7 @@ CompileReport     # artifact + per-stage timings + speedup_vs_sim
 SwapKind           # PARCELLATION | PARAMETERS | MODEL | FEATURES
 ```
 
-### 5.2 `tvb_max/surrogates/` — one target per literature model
+### 5.2 `tvb_xmax/surrogates/` — one target per literature model
 
 Mirrors `apvbt.dynamics.models` exactly (same `ParameterSpace`/`ParameterDefinition`/`DistributionType` shapes, same decorator registry). Six targets scaffolded, matching apvbt's six models:
 
@@ -187,7 +187,7 @@ The one-time compile spends the simulation budget (the *only* place real `vbjax`
 
 ## 7. Relationship to apvbt and vbjax (what's reused, what's replaced)
 
-| Concern | apvbt / vbjax | tvb-max |
+| Concern | apvbt / vbjax | tvb-xMax |
 |---|---|---|
 | cross-coder (IR) | `apvbt.XCode` / `vbjax.CrossCoder` | **reused as-is** (the IR is already parcellation-invariant) |
 | dynamics models | `apvbt.dynamics.models.*` (Hopf, MPR, …) | **reused for the one-time sim budget only**; parameter spaces mirrored in `surrogates/` |
@@ -197,23 +197,57 @@ The one-time compile spends the simulation budget (the *only* place real `vbjax`
 | cohort MVN | `XCode.calc_mvn` / `CrossCoder.calc_mvn` | **reused** for `optimize.condition_latent` |
 | diagnostics | `apvbt.inference.posterior_diags` (shrinkage, z, ci90) | **reused** + extended with SBC/C2ST in `community/leaderboard/scoring.py` |
 
-tvb-max is a **thin compiler layer over apvbt+vbjax**, not a replacement. It calls apvbt/vbjax at compile time and replaces them at run time.
+tvb-xMax is a **thin compiler layer over apvbt+vbjax**, not a replacement. It calls apvbt/vbjax at compile time and replaces them at run time.
 
 ## 8. Phased compiler roadmap
 
-### v0.1 — Skeleton + toy compile (✅ scaffolded)
+### v0.1 — Skeleton + toy compile (done, but had critical bugs)
 - IR dataclasses, all 8 compiler stages, 6 surrogate targets, 3 examples
 - Toy synthetic sim budget (no real vbjax sims needed to run examples)
 - `compile_spec` / `run` / `run_batch` / 4 swaps end-to-end on toy data
+- **Critical bugs found in honesty pass**: `lower.lower` ignored connectivity matrix (T0.1), `_adam` optimizer structurally broken (T0.2)
 
-### v0.2 — Real simulation budget
-- Wire `compile_spec` to `apvbt.sample_model` for the one-time budget
-- Split surrogate into shared trunk + feature head (enables cheap feature swap)
-- Real `benchmark_speedup` against `apvbt.sample_subj_model`
-- SBC + C2ST diagnostics in `CompileReport`
+### v0.1.5 — Honesty pass (done)
+- Fixed `lower.lower` to actually encode the subject's connectivity via `_encode_subject()` (T0.1)
+- Replaced broken hand-rolled Adam with `optax.adam` (T0.2)
+- Verified compile path runs end-to-end on toy data (T0.3)
+- Made `_noop_sim` honest — `speedup_vs_sim` is `nan` with explanatory note (T0.4)
+- pyproject.toml hygiene: excluded vendor from pytest, dropped scipy, pinned all versions (T1.1–T1.3)
+- Removed double vbjax on sys.path — now pip-installed only (T1.5)
+- Switched to `dataclasses.replace` in optimize (T1.6), cleaned up torch imports (T1.7)
+- Made `CompiledArtifact` pickleable via `__getstate__`/`__setstate__` + `rebuild_apply_fns` (T1.8)
+- Implemented trunk/head surrogate split: shared 2-layer tanh trunk + feature-specific 1-layer head (T1.9)
+- 133 tests across 10 test files, 98% line coverage on compiler + ir (T2.0–T2.10)
+- Wired real vbjax Hopf SDE into `benchmark_speedup` — ~68x CPU speedup measured (T3.1)
+- `bench/bench_hopf_speedup.py` benchmark script + `bench/results.md` baseline (T3.2)
+- `ArtifactCache` with in-memory + disk persistence, keyed by `(model, feature, nlat)` (T4.1)
+- Wired `swap_model`/`swap_features` to cache via `resolve_artifact`/`run_cached` (T4.2)
+- Extracted useful apvbt bits to `tvb_xmax/_apvbt/` (120KB), deleted 952KB vendor (T5.1)
+- Added `SimBudget` dataclass + `from_apvbt` adapter (T5.2)
+- Updated AGENTS.md troubleshooting with P0 bug entries (T7.4)
+- Updated README.md swap table + optax in quick-start (T7.3)
+
+### v0.2a — Real benchmark (done)
+- Real `vbjax.make_sde` + Hopf SDE wired into `benchmark_speedup` (T3.1)
+- Benchmark script records t_sim, t_surrogate, speedup, MSE (T3.2)
+
+### v0.2b — Trunk/head split (done)
+- Split surrogate into shared trunk + feature head (T1.9)
+- Feature swap reuses trunk, only retrains head
+- `rebuild_apply_fns` for pickle round-trip (T1.8)
+
+### v0.2c — SBC + C2ST diagnostics (planned)
+- Implement `sbc_score` (simulation-based calibration: rank-uniformity test)
+- Wire `c2st_score` (classifier two-sample test) from `community/leaderboard/scoring.py`
+- Populate `CompileReport.artifact.sbc_score` / `c2st_score` during `compile_spec` when `train_posterior=True`
+
+### v0.2d — Real sim budget via apvbt (planned)
+- `sim_budget.from_apvbt(xc, model, mvn, parc, n)` calls extracted `sample_model` with `pmap`
+- Produces a real `SimBudget` for training the surrogate
+- Validate: surrogate trained on real budget achieves MSE < toy-data MSE
 
 ### v0.3 — Multi-model + multi-feature artifacts
-- Artifact cache keyed by `(model, feature, nlat)`; model/feature swaps hit the cache
+- Artifact cache keyed by `(model, feature, nlat)` — **done in v0.1.5** (T4.1)
 - Cross-model posterior transfer (train posterior on Hopf, warm-start MPR posterior)
 - Heterogeneous-param summarization (`optimize.reparam_heterogeneous`) for real
 
@@ -228,7 +262,7 @@ tvb-max is a **thin compiler layer over apvbt+vbjax**, not a replacement. It cal
 
 ## 9. API with rate limiting and accounts
 
-`tvb_max/api/` — FastAPI app (`api/server.py`) with:
+`tvb_xmax/api/` — FastAPI app (`api/server.py`) with:
 
 - **Accounts** (`api/auth.py`): SQLite-backed, username+password (PBKDF2), per-account API key + JWT minting. Tiers: `free` / `pro` / `agent`.
 - **Auth middleware**: accepts `X-API-Key` header *or* `Authorization: Bearer <jwt>`. Skips auth for `/health`, `/account`, `/token`.
@@ -251,7 +285,7 @@ tvb-max is a **thin compiler layer over apvbt+vbjax**, not a replacement. It cal
   - `POST /api/v1/swap` — apply a free swap + re-run
   - `GET  /api/v1/leaderboard` — ranked artifacts
 
-Run: `tvbmax serve` → uvicorn on `:8088`.
+Run: `tvbxmax serve` → uvicorn on `:8088`.
 
 ## 10. Website with documentation
 
@@ -269,10 +303,10 @@ Build: `mkdocs serve` (add `mkdocs-material` to dev deps). Deploy: GitHub Pages 
 
 ## 11. Discord with openclaw agents
 
-`tvb_max/community/` — a Discord bot (`discord_bot.py`) hosting **openclaw agents**, one per literature model. Each agent (`community/agents/`) owns a `SurrogateTarget` and autonomously:
+`tvb_xmax/community/` — a Discord bot (`discord_bot.py`) hosting **openclaw agents**, one per literature model. Each agent (`community/agents/`) owns a `SurrogateTarget` and autonomously:
 
 1. **proposes** hyperparameters (nlat, hidden, niter, lr, sim_budget) by prompting an LLM (default: the local Gemma 4 12B server via the `gemma4-server-integration` skill, or any OpenAI-compatible endpoint),
-2. **compiles** an artifact by calling the tvb-max API `/compile`,
+2. **compiles** an artifact by calling the tvb-xMax API `/compile`,
 3. **submits** to the leaderboard,
 4. **iterates** based on its current rank.
 
@@ -280,11 +314,11 @@ The agent loop (`OpenClawAgent.step` / `run_forever`) is LLM-driven: the prompt 
 
 **Why "openclaw"**: the parody framing is a swarm of clawed agents competing to produce the best-calibrated surrogate for "their" model. The LLM endpoint is pluggable so it can run on the local Gemma 4 server (no external API costs) or on any hosted model.
 
-Run: `tvbmax agents` (needs `TVBMAX_DISCORD_TOKEN` + `TVBMAX_AGENT_INTERVAL`).
+Run: `tvbxmax agents` (needs `TVBXMAX_DISCORD_TOKEN` + `TVBXMAX_AGENT_INTERVAL`).
 
 ## 12. Leaderboard
 
-`tvb_max/community/leaderboard/scoring.py` + `api/routes/leaderboard.py`. Ranks artifacts on three axes:
+`tvb_xmax/community/leaderboard/scoring.py` + `api/routes/leaderboard.py`. Ranks artifacts on three axes:
 
 - **Calibration**: SBC (simulation-based calibration, `sbc_score`, 1=perfect) + C2ST (classifier two-sample test, `c2st_score`, 1=perfect match)
 - **Fidelity**: surrogate MSE vs real sim features
@@ -305,12 +339,12 @@ Each is self-contained: builds a trivial single-view `vbjax.CrossCoder`, synthes
 ## 14. Repository layout
 
 ```
-tvb-max/
+tvb-xMax/
 ├── PLAN.md                  ← this file
 ├── README.md
 ├── AGENTS.md                ← parody agent guide (mirrors apvbt/AGENTS.md)
 ├── pyproject.toml
-├── tvb_max/
+├── tvb_xmax/
 │   ├── __init__.py
 │   ├── ir.py                ← IR dataclasses
 │   ├── cli.py
@@ -343,21 +377,23 @@ tvb-max/
 
 1. **Week 1 — compiler core**: flesh out `codegen.train_surrogate` with real Adam, wire `pipeline.compile_spec` to `apvbt.sample_model` for the sim budget, validate on Hopf with real HCP data. Target: `CompileReport` with real `surrogate_mse` + `speedup_vs_sim`.
 2. **Week 2 — swaps + posterior**: implement `optimize.reparam_heterogeneous` for real (summarize hetero `eta`/`omega` arrays), wire `posterior.attach_posterior`, validate SBC/C2ST on the Hopf artifact.
-3. **Week 3 — API**: stand up FastAPI, wire `/compile` to the pipeline, `/infer` to `pipeline.run`, deploy behind Caddy (reuse the `godaddy-caddy-ingress` skill for `tvb-max.ins-amu.fr`).
+3. **Week 3 — API**: stand up FastAPI, wire `/compile` to the pipeline, `/infer` to `pipeline.run`, deploy behind Caddy (reuse the `godaddy-caddy-ingress` skill for `tvb-xMax.ins-amu.fr`).
 4. **Week 4 — docs + examples**: MkDocs site, real (non-toy) examples using cached `both.pkl`, curl recipes.
 5. **Week 5 — agents**: Discord bot + 2 openclaw agents (Hopf, MPR) on the local Gemma 4 server, leaderboard live.
 6. **Week 6 — community**: open the remaining 4 model channels, agent authoring guide, first public leaderboard snapshot.
 
 ## 16. Open questions
 
-| Question | Lean |
-|---|---|
-| Surrogate trunk/head split now or v0.2? | v0.2 — ship the flat MLP first, validate the speedup claim |
-| Posterior over full `θ` or just `(k,D)`? | Full `θ` (incl. latent `u`) like apvbt's cohort SBI; subject-level is a swap |
-| Redis for rate limits from day 1? | No — in-memory until multi-worker; interface is stable |
-| LLM for agents: local Gemma 4 or hosted? | Local Gemma 4 (zero cost, `gemma4-server-integration` skill) |
-| Real sim budget: apvbt `sample_model` or fresh? | Reuse `apvbt.sample_model` — it already does the `pmap` batched sims |
-| Artifact storage: pkl or DB? | pkl files + SQLite index; graduate to object storage if needed |
+| Question | Lean | Status |
+|---|---|---|
+| Surrogate trunk/head split now or v0.2? | v0.2 — ship the flat MLP first, validate the speedup claim | **Resolved** (T1.9): implemented trunk/head split in P1 |
+| Posterior over full `θ` or just `(k,D)`? | Full `θ` (incl. latent `u`) like apvbt's cohort SBI; subject-level is a swap | Open |
+| Redis for rate limits from day 1? | No — in-memory until multi-worker; interface is stable | Open |
+| LLM for agents: local Gemma 4 or hosted? | Local Gemma 4 (zero cost, `gemma4-server-integration` skill) | Open |
+| Real sim budget: apvbt `sample_model` or fresh? | Reuse `apvbt.sample_model` — it already does the `pmap` batched sims | **Resolved** (T5.1/T5.2): extracted apvbt bits to `tvb_xmax/_apvbt/`, added `SimBudget` + `from_apvbt` adapter |
+| Artifact storage: pkl or DB? | pkl files + SQLite index; graduate to object storage if needed | **Resolved** (T4.1): `ArtifactCache` with pkl + `index.json` |
+| Adam optimizer: hand-rolled or optax? | optax — standard, well-tested, avoids maintenance burden | **Resolved** (T0.2): replaced broken `_adam` with `optax.adam` |
+| apvbt: vendor, submodule, or extract? | Extract useful bits, drop the rest | **Resolved** (T5.1): extracted 120KB to `tvb_xmax/_apvbt/`, deleted 952KB vendor |
 
 ---
 

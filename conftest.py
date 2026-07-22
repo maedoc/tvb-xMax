@@ -1,12 +1,5 @@
-"""Pytest config: put vendored vbjax/apvbt on sys.path before collection.
+"""Pytest config.
 
-This mirrors the sys.path prepend in ``tvb_max/__init__.py`` so that
-``import vbjax`` / ``import apvbt`` resolve to the vendored copies even
-when a test imports them before importing tvb_max.
+``vbjax`` resolves via the pip-installed copy in site-packages; no
+``sys.path`` manipulation is needed.
 """
-import os
-import sys
-
-_VENDOR = os.path.join(os.path.dirname(__file__), "vendor")
-if _VENDOR not in sys.path:
-    sys.path.insert(0, _VENDOR)
