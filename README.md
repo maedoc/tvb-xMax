@@ -1,5 +1,9 @@
 # tvb-xMax
 
+<p align="center">
+  <img src="assets/tvb-xmax-logo-wide.jpg" alt="tvb-xMax — connectome to latent IR to predicted signal" width="900">
+</p>
+
 > **Compile a virtual-brain simulation budget once. Run surrogate inference thereafter.**
 
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
