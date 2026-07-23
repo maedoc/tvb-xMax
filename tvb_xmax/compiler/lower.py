@@ -111,8 +111,12 @@ def lower(spec: IRSpec, crosscoder) -> IRProgram:
                 f"parcellation {parc!r} not in cross-coder views {crosscoder.parcs}"
             )
         w = jnp.asarray(spec.connectivity)
+        if w.ndim != 2:
+            raise ValueError(
+                f"connectivity must be a 2-D matrix, got shape {w.shape}"
+            )
         i, j = jnp.triu_indices(w.shape[-1], k=1)
-        triu = w[..., i, j]
+        triu = w[i, j]
         u = _encode_subject(crosscoder, nlat, parc, triu)
         u = jnp.asarray(u)
         if u.ndim > 1:

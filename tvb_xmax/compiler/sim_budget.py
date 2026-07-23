@@ -23,7 +23,10 @@ def from_apvbt(
     n_samples: int = 4096,
     feature: str = "var",
     model_fn: Optional[Callable] = None,
-    **sim_kw,
+    num_batch: Optional[int] = None,
+    batch_size: int = 128,
+    prog: bool = False,
+    use_pmap: bool = False,
 ) -> SimBudget:
     """Produce a SimBudget by calling the extracted apvbt simulation pipeline.
 
@@ -40,16 +43,18 @@ def from_apvbt(
         parc: Parcellation name.  Must be in ``xc.parcs``.
         n_samples: Total number of simulation samples to draw.  The underlying
             apvbt sampler works in ``(num_batch, batch_size)`` chunks; these
-            are derived from ``n_samples``.  Pass ``num_batch`` / ``batch_size``
-            explicitly via ``**sim_kw`` to override.
+            are derived from ``n_samples`` when ``num_batch`` is not specified.
         feature: Feature extraction name for the returned SimBudget metadata.
         model_fn: Explicit dynamics callable.  When provided, ``model`` can be
             a plain string (used for SimBudget metadata only) and this callable
             is used for the actual simulation.  **Required** when ``model`` is
             a string, because ``vbjax`` has no ``sim`` submodule.
-        **sim_kw: Additional keyword arguments forwarded to
-            ``apvbt.simulation.sample_model`` (e.g. ``num_batch``,
-            ``batch_size``, ``prog``, ``use_pmap``).
+        num_batch: Number of batches to draw.  When not set, inferred from
+            ``n_samples / batch_size``.
+        batch_size: Samples per batch (default 128).  Always forwarded to
+            ``sample_model``.
+        prog: Show progress bar.
+        use_pmap: Use ``pmap`` for parallel simulation.
 
     Returns:
         SimBudget with real simulation data.
@@ -84,22 +89,8 @@ def from_apvbt(
     nlat = int(mvn.u_mean.shape[0])
 
     # ---- convert n_samples -> (num_batch, batch_size) ----
-    if "num_batch" not in sim_kw and "batch_size" not in sim_kw:
-        batch_size = 128
+    if num_batch is None:
         num_batch = max(1, math.ceil(n_samples / batch_size))
-    elif "num_batch" in sim_kw:
-        num_batch = sim_kw.pop("num_batch")
-        batch_size = sim_kw.pop("batch_size", 128)
-    else:
-        batch_size = sim_kw.pop("batch_size", 128)
-        num_batch = max(1, math.ceil(n_samples / batch_size))
-
-    prog = sim_kw.pop("prog", False)
-    use_pmap = sim_kw.pop("use_pmap", False)
-
-    if sim_kw:
-        import warnings
-        warnings.warn(f"unused sim_kw: {set(sim_kw)}")
 
     # ---- run simulation ----
     thetas, xfs = apvbt_sim.sample_model(

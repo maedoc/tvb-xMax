@@ -300,8 +300,8 @@ def test_lower_xcode_style(toy_nlat):
     assert prog.u.shape == (toy_nlat,)
 
 
-def test_lower_batch_connectivity_reshape(toy_crosscoder):
-    """Coverage: 2D u from batched connectivity is reshaped to 1D."""
+def test_lower_batch_connectivity_raises(toy_crosscoder):
+    """Batch connectivity (>2D) raises ValueError."""
     conn = jnp.zeros((2, N_REGIONS, N_REGIONS))
     spec = ir.IRSpec(
         model="hopf",
@@ -310,6 +310,5 @@ def test_lower_batch_connectivity_reshape(toy_crosscoder):
         parcellation="parc_a",
         parameters={"k": 0.5, "D": 0.3},
     )
-    prog = lower.lower(spec, toy_crosscoder)
-    assert prog.u.ndim == 1
-    assert prog.u.shape[0] == 2 * NLAT
+    with pytest.raises(ValueError, match="connectivity must be a 2-D matrix"):
+        lower.lower(spec, toy_crosscoder)

@@ -62,7 +62,10 @@ def sharded_features(artifact: CompiledArtifact, U: jax.Array,
     if n_dev == 1:
         return batched_features(artifact, U, Theta)
     lead = U.shape[0]
-    assert lead % n_dev == 0, f"batch {lead} not divisible by {n_dev} devices"
+    if lead % n_dev != 0:
+        raise ValueError(
+            f"batch size {lead} not divisible by {n_dev} devices"
+        )
     U_ = U.reshape((n_dev, -1) + U.shape[1:])
     T_ = Theta.reshape((n_dev, -1) + Theta.shape[1:])
     out = jax.pmap(jax.vmap(artifact.surrogate_apply))(U_, T_)

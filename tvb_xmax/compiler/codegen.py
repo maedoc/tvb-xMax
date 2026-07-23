@@ -17,7 +17,6 @@ cheap head, not the trunk (the "feature swap").
 
 from __future__ import annotations
 
-import functools
 from typing import List, Tuple
 
 import jax
@@ -196,7 +195,7 @@ def train_surrogate(model: str, feature: str, sim_pairs, nlat: int,
     trunk_params = params["trunk"]
     head_params = params["head"]
 
-    @functools.partial(jax.jit, static_argnums=())
+    @jax.jit
     def apply_trained(u, theta):
         h = _trunk_apply(jnp.concatenate([u, theta]), trunk_params)
         return _head_apply(h, head_params)

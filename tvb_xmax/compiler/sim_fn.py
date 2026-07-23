@@ -45,10 +45,12 @@ def _make_hopf_sim_fn(
     n_transient: int = 50,
     dt: float = 0.1,
 ) -> Callable:
-    """Return a Hopf sim_fn(u, theta) -> features.
+    """Return a Hopf ``sim_fn(u, theta) -> features``.
 
-    The returned function closes over the cross-coder, SDE loop, and
-    parameter bounds so it is self-contained for benchmark_speedup.
+    The returned function is pure (no mutable state): it uses a fixed
+    PRNG key based on ``n_steps`` so that noise is deterministic and
+    identical across calls with the same ``n_steps``.  This is fine for
+    benchmarking where only timing matters.
     """
     # Determine n_regions from the decoder output dimension
     iparc = crosscoder.parcs.index(parc)
@@ -61,8 +63,6 @@ def _make_hopf_sim_fn(
 
     _, sde_loop = _make_hopf_sde(n_regions, dt)
 
-    prng_key = jax.random.PRNGKey(42)
-
     def sim_fn(u: jax.Array, theta: jax.Array) -> jax.Array:
         C = crosscoder.decode_conn(nlat, parc, u[None, :],
                                    clip_positive=True)[0]
@@ -74,10 +74,8 @@ def _make_hopf_sim_fn(
 
         state0 = jnp.concatenate([jnp.zeros(n_regions),
                                   jnp.ones(n_regions)])
-
-        nonlocal prng_key
-        prng_key, subkey = jax.random.split(prng_key)
-        zs = jax.random.normal(subkey, (n_steps, 2 * n_regions))
+        zs = jax.random.normal(jax.random.PRNGKey(n_steps),
+                               (n_steps, 2 * n_regions))
 
         states = sde_loop(state0, zs,
                           (C, eta_arr, omega_arr, k_val, D_val))

@@ -44,7 +44,7 @@ class _SimCrossCoder:
         self.parcs = ["parc_a", "parc_b"]
         self.n_triu = n_triu
 
-        k1, k2, k3, k4, k5, k6 = jax.random.split(key, 6)
+        k1, k2, k3, k4, k5, k6, k7, k8, k9, k10 = jax.random.split(key, 10)
 
         # Per-parcellation normalisation metadata
         self.means = [
@@ -64,10 +64,10 @@ class _SimCrossCoder:
                  jax.random.normal(k6, (n_triu,))),          # db
             ),
             (
-                (jax.random.normal(k3, (n_triu, nlat)),
-                 jax.random.normal(k4, (nlat,))),
-                (jax.random.normal(k5, (nlat, n_triu)),
-                 jax.random.normal(k6, (n_triu,))),
+                (jax.random.normal(k7, (n_triu, nlat)),
+                 jax.random.normal(k8, (nlat,))),
+                (jax.random.normal(k9, (nlat, n_triu)),
+                 jax.random.normal(k10, (n_triu,))),
             ),
         ]
 
